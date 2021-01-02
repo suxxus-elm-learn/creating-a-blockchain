@@ -220,8 +220,8 @@ isDataSetted blockData =
         ]
 
 
-updateChain : Model -> Posix -> List Block
-updateChain model posix =
+addBlock : Model -> Posix -> List Block
+addBlock model posix =
     let
         newBlock =
             createNewBlock model (posixToString posix)
@@ -306,7 +306,7 @@ update msg model =
             ( model, getCurrentTime )
 
         CurrentTime posix ->
-            ( { model | chain = updateChain model posix }, Cmd.none )
+            ( { model | chain = addBlock model posix }, Cmd.none )
 
         ValidateBlockChain ->
             let
