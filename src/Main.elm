@@ -95,20 +95,6 @@ encodeBlockData blockData =
 --- HELPERS ---
 
 
-getDefaultBlock : Block
-getDefaultBlock =
-    { index = 0
-    , timestamp = ""
-    , data =
-        { sender = ""
-        , receives = ""
-        , amount = 0
-        }
-    , previousHash = ""
-    , hash = ""
-    }
-
-
 isChainValid : BlockChain -> Int -> Int -> Bool
 isChainValid blockChain len count =
     let
@@ -474,7 +460,7 @@ getLastBlockFromChain blockchain =
     blockchain
         |> List.reverse
         |> List.head
-        |> (\item -> Maybe.withDefault getDefaultBlock item)
+        |> (\item -> Maybe.withDefault defaultBlock item)
 
 
 showCreatedBlock : BlockChain -> Html Msg
