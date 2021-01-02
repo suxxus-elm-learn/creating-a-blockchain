@@ -6,3 +6,6 @@ Understand how blockchains work
 
 ### Tech
 [Elm](https://elm-lang.org/) A delightful language with no runtime exceptions.
+
+### Demo
+[Simple blockchain](http://suxxus.github.io/studies/creating-a-blockchain/)
