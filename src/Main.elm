@@ -21,7 +21,7 @@ type alias BlockChain =
 
 type alias Block =
     { index : Int
-    , timestamp : String
+    , time : String
     , data : BlockData
     , previousHash : String
     , hash : String
@@ -59,7 +59,7 @@ initialData =
 defaultBlock : Block
 defaultBlock =
     { index = 0
-    , timestamp = ""
+    , time = ""
     , data = initialData
     , previousHash = ""
     , hash = ""
@@ -120,7 +120,7 @@ isChainValid blockChain len count =
                 else if
                     currentBlock.hash
                         /= calculateHash currentBlock.index
-                            currentBlock.timestamp
+                            currentBlock.time
                             currentBlock.data
                             currentBlock.previousHash
                 then
@@ -150,10 +150,10 @@ posixToString time =
 
 
 calculateHash : Int -> String -> BlockData -> String -> String
-calculateHash idx timeStamp blockData prevHash =
+calculateHash idx time blockData prevHash =
     Crypto.Hash.sha224
         (String.fromInt idx
-            ++ timeStamp
+            ++ time
             ++ encodeBlockData blockData
             ++ prevHash
         )
@@ -166,7 +166,7 @@ createGenesisBlock =
             { sender = "", receives = "", amount = 0 }
     in
     { index = 0
-    , timestamp = "0"
+    , time = "0"
     , data = blockData
     , previousHash = "0"
     , hash = calculateHash 0 "0" blockData "0"
@@ -204,7 +204,7 @@ createNewBlock model time =
             getPreviousHash model.chain
     in
     { index = nextIndex
-    , timestamp = time
+    , time = time
     , data = blockData
     , previousHash = prevHash
     , hash = calculateHash nextIndex time blockData prevHash
@@ -422,7 +422,7 @@ validateBlockChainField model =
 blockElements : Block -> List (Html Msg)
 blockElements block =
     [ li [] [ text <| "index: " ++ String.fromInt block.index ]
-    , li [] [ text <| "timestamp: " ++ block.timestamp ]
+    , li [] [ text <| "time: " ++ block.time ]
     , li [] [ text <| "data: " ++ encodeBlockData block.data ]
     , li [] [ text <| "previousHash: " ++ block.previousHash ]
     , li [] [ text <| "hash: " ++ block.hash ]
