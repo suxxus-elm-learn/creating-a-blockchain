@@ -8,7 +8,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Json.Encode as Encode
 import Task
-import Time exposing (Posix)
+import Time exposing (Posix, Zone)
 
 
 
@@ -41,6 +41,7 @@ type alias Model =
     , validChain : Bool
     , validated : Bool
     , showBlockChain : Bool
+    , zone : Zone
     }
 
 
@@ -64,6 +65,10 @@ defaultBlock =
     , previousHash = ""
     , hash = ""
     }
+
+
+
+--- ENCODERS ---
 
 
 sender : String -> ( String, Encode.Value )
@@ -95,22 +100,22 @@ encodeBlockData blockData =
 --- HELPERS ---
 
 
+getBlockFromBlockChain : BlockChain -> Block -> Int -> Block
+getBlockFromBlockChain blockchain defBlock index =
+    blockchain
+        |> Array.fromList
+        |> Array.get index
+        |> Maybe.withDefault defBlock
+
+
 isChainValid : BlockChain -> Int -> Int -> Bool
 isChainValid blockChain len count =
     let
         currentBlock =
-            Maybe.withDefault defaultBlock
-                (Array.get count
-                    (Array.fromList
-                        blockChain
-                    )
-                )
+            getBlockFromBlockChain blockChain defaultBlock count
 
         previousBlock =
-            Maybe.withDefault defaultBlock
-                (Array.get (count - 1)
-                    (Array.fromList blockChain)
-                )
+            getBlockFromBlockChain blockChain defaultBlock (count - 1)
 
         validateHash =
             \_ ->
@@ -142,6 +147,12 @@ getCurrentTime =
         |> Task.perform CurrentTime
 
 
+getZone : Cmd Msg
+getZone =
+    Time.here
+        |> Task.perform GetTimeZone
+
+
 posixToString : Posix -> String
 posixToString time =
     time
@@ -166,7 +177,7 @@ createGenesisBlock =
             { sender = "", receives = "", amount = 0 }
     in
     { index = 0
-    , time = "0"
+    , time = "1609700813806"
     , data = blockData
     , previousHash = "0"
     , hash = calculateHash 0 "0" blockData "0"
@@ -191,8 +202,10 @@ createNewBlock : Model -> String -> Block
 createNewBlock model time =
     let
         blockData =
-            { sender = model.data.sender
-            , receives = model.data.receives
+            { sender =
+                model.data.sender
+            , receives =
+                model.data.receives
             , amount =
                 model.data.amount
             }
@@ -211,8 +224,8 @@ createNewBlock model time =
     }
 
 
-isDataSetted : BlockData -> Bool
-isDataSetted blockData =
+validateNewBlockForm : BlockData -> Bool
+validateNewBlockForm blockData =
     List.all (\item -> item)
         [ String.length blockData.sender > 0
         , String.length blockData.receives > 0
@@ -220,11 +233,14 @@ isDataSetted blockData =
         ]
 
 
-addBlock : Model -> Posix -> List Block
-addBlock model posix =
+addBlock : Model -> Posix -> BlockChain
+addBlock model t =
     let
+        time =
+            posixToString t
+
         newBlock =
-            createNewBlock model (posixToString posix)
+            createNewBlock model time
 
         chainReversed =
             List.reverse model.chain
@@ -236,21 +252,7 @@ addBlock model posix =
 
 
 
----- MODEL ----
-
-
-init : ( Model, Cmd Msg )
-init =
-    let
-        model =
-            { chain = List.singleton createGenesisBlock
-            , data = initialData
-            , validChain = False
-            , validated = False
-            , showBlockChain = False
-            }
-    in
-    ( model, Cmd.none )
+---- BLOCK DATA FIELDS SETTERS ----
 
 
 setSender : BlockData -> String -> BlockData
@@ -266,14 +268,35 @@ setReceives blockData value =
 setAmount : BlockData -> String -> BlockData
 setAmount blockData value =
     let
-        checkaAmount =
+        checkAmount =
             if value == "" then
                 0
 
             else
-                String.toInt value |> Maybe.withDefault blockData.amount
+                value
+                    |> String.toInt
+                    |> Maybe.withDefault blockData.amount
     in
-    { blockData | amount = checkaAmount }
+    { blockData | amount = checkAmount }
+
+
+
+---- MODEL ----
+
+
+init : () -> ( Model, Cmd Msg )
+init _ =
+    let
+        model =
+            { chain = List.singleton createGenesisBlock
+            , data = initialData
+            , validChain = False
+            , validated = False
+            , showBlockChain = False
+            , zone = Time.utc
+            }
+    in
+    ( model, getZone )
 
 
 
@@ -282,6 +305,7 @@ setAmount blockData value =
 
 type Msg
     = CurrentTime Posix
+    | GetTimeZone Zone
     | ChangeBlockDataSender String
     | ChangeBlockDataReceives String
     | ChangeBlockDataAmount String
@@ -293,6 +317,9 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        GetTimeZone timeZone ->
+            ( { model | zone = timeZone }, Cmd.none )
+
         ChangeBlockDataSender value ->
             ( { model | data = setSender model.data value }, Cmd.none )
 
@@ -306,7 +333,11 @@ update msg model =
             ( model, getCurrentTime )
 
         CurrentTime posix ->
-            ( { model | chain = addBlock model posix }, Cmd.none )
+            ( { model
+                | chain = addBlock model posix
+              }
+            , Cmd.none
+            )
 
         ValidateBlockChain ->
             let
@@ -387,7 +418,7 @@ blockDataFields blockData =
         , button
             [ type_ "button"
             , onClick SubmitBlockData
-            , disabled <| not (isDataSetted blockData)
+            , disabled <| not (validateNewBlockForm blockData)
             , class "mt4"
             ]
             [ text "Submit" ]
@@ -419,9 +450,132 @@ validateBlockChainField model =
         ]
 
 
-blockElements : Block -> List (Html Msg)
-blockElements block =
+getMonth : Time.Month -> String
+getMonth month =
+    case month of
+        Time.Jan ->
+            "01"
+
+        Time.Feb ->
+            "02"
+
+        Time.Mar ->
+            "03"
+
+        Time.Apr ->
+            "04"
+
+        Time.May ->
+            "05"
+
+        Time.Jun ->
+            "06"
+
+        Time.Jul ->
+            "07"
+
+        Time.Aug ->
+            "08"
+
+        Time.Sep ->
+            "09"
+
+        Time.Oct ->
+            "10"
+
+        Time.Nov ->
+            "11"
+
+        Time.Dec ->
+            "12"
+
+
+getDay : Time.Weekday -> String
+getDay day =
+    case day of
+        Time.Mon ->
+            "01"
+
+        Time.Tue ->
+            "02"
+
+        Time.Wed ->
+            "03"
+
+        Time.Thu ->
+            "04"
+
+        Time.Fri ->
+            "05"
+
+        Time.Sat ->
+            "06"
+
+        Time.Sun ->
+            "07"
+
+
+formatTime : String -> String
+formatTime value =
+    if String.length value == 1 then
+        "0" ++ value
+
+    else
+        value
+
+
+getCreationDate : Zone -> String -> String
+getCreationDate zone t =
+    let
+        time =
+            t
+                |> String.toInt
+                |> Maybe.withDefault 0
+                |> Time.millisToPosix
+
+        year =
+            Time.toYear zone time
+                |> String.fromInt
+
+        month =
+            Time.toMonth zone time
+                |> getMonth
+
+        day =
+            Time.toWeekday zone time
+                |> getDay
+
+        hour =
+            Time.toHour zone time
+                |> String.fromInt
+
+        minutes =
+            Time.toMinute zone time
+                |> String.fromInt
+                |> formatTime
+
+        seconds =
+            Time.toSecond zone time
+                |> String.fromInt
+                |> formatTime
+    in
+    year
+        ++ "/"
+        ++ month
+        ++ "/"
+        ++ day
+        ++ " "
+        ++ hour
+        ++ ":"
+        ++ minutes
+        ++ ":"
+        ++ seconds
+
+
+blockElements : Zone -> Block -> List (Html Msg)
+blockElements zone block =
     [ li [] [ text <| "index: " ++ String.fromInt block.index ]
+    , li [] [ text <| "created date: " ++ getCreationDate zone block.time ]
     , li [] [ text <| "time: " ++ block.time ]
     , li [] [ text <| "data: " ++ encodeBlockData block.data ]
     , li [] [ text <| "previousHash: " ++ block.previousHash ]
@@ -429,25 +583,35 @@ blockElements block =
     ]
 
 
-listBlocksElements : BlockChain -> List (Html Msg)
-listBlocksElements blockchain =
+listBlocksElements : Zone -> BlockChain -> List (Html Msg)
+listBlocksElements zone blockchain =
     List.map
         (\block ->
             block
-                |> blockElements
+                |> blockElements zone
                 |> ul [ class "ml5 list pl0 tl" ]
         )
         blockchain
 
 
-renderBlockChainElements : BlockChain -> Bool -> Html Msg
-renderBlockChainElements blockchain hasToShowData =
+renderBlockChainElements : Model -> Html Msg
+renderBlockChainElements model =
+    let
+        hasToShowData =
+            model.showBlockChain
+
+        blockchain =
+            model.chain
+
+        zone =
+            model.zone
+    in
     div
         [ class "ba b--mid-gray br2 pa3" ]
         [ button [ onClick ShowData ] [ text "show blockChain" ]
         , if hasToShowData then
             blockchain
-                |> listBlocksElements
+                |> listBlocksElements zone
                 |> div []
 
           else
@@ -463,14 +627,21 @@ getLastBlockFromChain blockchain =
         |> (\item -> Maybe.withDefault defaultBlock item)
 
 
-showCreatedBlock : BlockChain -> Html Msg
-showCreatedBlock blockchain =
+showCreatedBlock : Model -> Html Msg
+showCreatedBlock model =
+    let
+        zone =
+            model.zone
+
+        blockchain =
+            model.chain
+    in
     div
         [ class "ba b--mid-gray br2 pa3 mb4" ]
         [ h3 [ class "f3 f3-m" ] [ text "last block" ]
         , blockchain
             |> getLastBlockFromChain
-            |> blockElements
+            |> blockElements zone
             |> ul [ class "ml5 list pl0 tl" ]
         ]
 
@@ -479,10 +650,10 @@ view : Model -> Html Msg
 view model =
     div [ class "pa5" ]
         [ h1 [] [ text "Simple Block chain" ]
-        , showCreatedBlock model.chain
+        , showCreatedBlock model
         , blockDataFields model.data
         , validateBlockChainField model
-        , renderBlockChainElements model.chain model.showBlockChain
+        , renderBlockChainElements model
         ]
 
 
@@ -494,7 +665,7 @@ main : Program () Model Msg
 main =
     Browser.element
         { view = view
-        , init = \_ -> init
+        , init = init
         , update = update
         , subscriptions = always Sub.none
         }
