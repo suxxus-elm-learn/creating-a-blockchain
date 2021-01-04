@@ -189,17 +189,17 @@ getNextIndex chain =
     List.length chain
 
 
-getPreviousHash : List Block -> String
-getPreviousHash list =
+getPreviousHash : Block -> BlockChain -> String
+getPreviousHash defBlock list =
     list
         |> List.reverse
         |> List.head
-        |> Maybe.withDefault defaultBlock
-        |> (\block -> block.hash)
+        |> Maybe.withDefault defBlock
+        |> (\{ hash } -> hash)
 
 
-createNewBlock : Model -> String -> Block
-createNewBlock model time =
+createNewBlock : Block -> Model -> String -> Block
+createNewBlock defBlock model time =
     let
         blockData =
             { sender =
@@ -214,7 +214,7 @@ createNewBlock model time =
             getNextIndex model.chain
 
         prevHash =
-            getPreviousHash model.chain
+            getPreviousHash defBlock model.chain
     in
     { index = nextIndex
     , time = time
@@ -240,7 +240,7 @@ addBlock model t =
             posixToString t
 
         newBlock =
-            createNewBlock model time
+            createNewBlock defaultBlock model time
 
         chainReversed =
             List.reverse model.chain
@@ -619,12 +619,12 @@ renderBlockChainElements model =
         ]
 
 
-getLastBlockFromChain : BlockChain -> Block
-getLastBlockFromChain blockchain =
+getLastBlockFromChain : Block -> BlockChain -> Block
+getLastBlockFromChain defBlock blockchain =
     blockchain
         |> List.reverse
         |> List.head
-        |> (\item -> Maybe.withDefault defaultBlock item)
+        |> Maybe.withDefault defBlock
 
 
 showCreatedBlock : Model -> Html Msg
@@ -640,7 +640,7 @@ showCreatedBlock model =
         [ class "ba b--mid-gray br2 pa3 mb4" ]
         [ h3 [ class "f3 f3-m" ] [ text "last block" ]
         , blockchain
-            |> getLastBlockFromChain
+            |> getLastBlockFromChain defaultBlock
             |> blockElements zone
             |> ul [ class "ml5 list pl0 tl" ]
         ]
