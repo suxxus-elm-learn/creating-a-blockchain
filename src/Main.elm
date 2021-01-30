@@ -7,6 +7,7 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Json.Encode as Encode
+import Regex
 import Task
 import Time exposing (Posix, Zone)
 
@@ -31,7 +32,7 @@ type alias Block =
 type alias BlockData =
     { sender : String
     , receives : String
-    , amount : Int
+    , amount : String
     }
 
 
@@ -40,6 +41,7 @@ type alias Model =
     , data : BlockData
     , validChain : Bool
     , validated : Bool
+    , validAmount : Bool
     , showBlockChain : Bool
     , zone : Zone
     }
@@ -53,7 +55,7 @@ initialData : BlockData
 initialData =
     { sender = ""
     , receives = ""
-    , amount = 0
+    , amount = ""
     }
 
 
@@ -81,9 +83,9 @@ receives value =
     ( "receives", Encode.string value )
 
 
-amount : Int -> ( String, Encode.Value )
+amount : String -> ( String, Encode.Value )
 amount value =
-    ( "amout", Encode.int value )
+    ( "amount", Encode.string value )
 
 
 encodeBlockData : BlockData -> String
@@ -97,15 +99,56 @@ encodeBlockData blockData =
 
 
 
---- HELPERS ---
+--- REGEX ---
 
 
-getBlockFromBlockChain : BlockChain -> Block -> Int -> Block
-getBlockFromBlockChain blockchain defBlock index =
-    blockchain
-        |> Array.fromList
-        |> Array.get index
-        |> Maybe.withDefault defBlock
+testRegex : Regex.Regex -> (String -> Bool)
+testRegex regex =
+    Regex.contains regex
+
+
+validateRegexExp : String -> Regex.Regex
+validateRegexExp pattern =
+    pattern
+        |> Regex.fromString
+        |> Maybe.withDefault Regex.never
+
+
+numberWithDecimals : Regex.Regex
+numberWithDecimals =
+    "^[+-]?(\\d*\\.)?\\d+$"
+        |> validateRegexExp
+
+
+numberStartsWithZero : Regex.Regex
+numberStartsWithZero =
+    "^(0\\d{1,})$"
+        |> validateRegexExp
+
+
+
+---- PREDICATES ----
+
+
+isGreaterThanZero : Float -> Bool
+isGreaterThanZero value =
+    value > 0
+
+
+isValidAmount : String -> Bool
+isValidAmount value =
+    let
+        patternMatch =
+            value
+                |> testRegex numberWithDecimals
+
+        greaterThanZero =
+            value
+                |> String.toFloat
+                |> Maybe.withDefault 0
+                |> isGreaterThanZero
+    in
+    patternMatch && greaterThanZero
 
 
 isChainValid : BlockChain -> Int -> Int -> Bool
@@ -117,28 +160,40 @@ isChainValid blockChain len count =
         previousBlock =
             getBlockFromBlockChain blockChain defaultBlock (count - 1)
 
-        validateHash =
+        hash =
+            calculateHash currentBlock.index
+                currentBlock.time
+                currentBlock.data
+                currentBlock.previousHash
+
+        isValidHash =
             \_ ->
                 if currentBlock.previousHash /= previousBlock.hash then
                     False
 
-                else if
-                    currentBlock.hash
-                        /= calculateHash currentBlock.index
-                            currentBlock.time
-                            currentBlock.data
-                            currentBlock.previousHash
-                then
+                else if currentBlock.hash /= hash then
                     False
 
                 else
                     isChainValid blockChain len (count + 1)
     in
     if count < len then
-        validateHash ()
+        isValidHash ()
 
     else
         True
+
+
+
+--- HELPERS ---
+
+
+getBlockFromBlockChain : BlockChain -> Block -> Int -> Block
+getBlockFromBlockChain blockchain block index =
+    blockchain
+        |> Array.fromList
+        |> Array.get index
+        |> Maybe.withDefault block
 
 
 getCurrentTime : Cmd Msg
@@ -174,7 +229,7 @@ createGenesisBlock : Block
 createGenesisBlock =
     let
         blockData =
-            { sender = "", receives = "", amount = 0 }
+            { sender = "GENESIS BLOCK", receives = "nothing", amount = "0" }
     in
     { index = 0
     , time = "1609700813806"
@@ -190,16 +245,16 @@ getNextIndex chain =
 
 
 getPreviousHash : Block -> BlockChain -> String
-getPreviousHash defBlock list =
+getPreviousHash block list =
     list
         |> List.reverse
         |> List.head
-        |> Maybe.withDefault defBlock
+        |> Maybe.withDefault block
         |> (\{ hash } -> hash)
 
 
 createNewBlock : Block -> Model -> String -> Block
-createNewBlock defBlock model time =
+createNewBlock block model time =
     let
         blockData =
             { sender =
@@ -214,7 +269,7 @@ createNewBlock defBlock model time =
             getNextIndex model.chain
 
         prevHash =
-            getPreviousHash defBlock model.chain
+            getPreviousHash block model.chain
     in
     { index = nextIndex
     , time = time
@@ -229,7 +284,10 @@ validateNewBlockForm blockData =
     List.all (\item -> item)
         [ String.length blockData.sender > 0
         , String.length blockData.receives > 0
-        , blockData.amount > 0
+        , blockData.amount
+            |> String.toFloat
+            |> Maybe.withDefault 0
+            |> isGreaterThanZero
         ]
 
 
@@ -267,17 +325,7 @@ setReceives blockData value =
 
 setAmount : BlockData -> String -> BlockData
 setAmount blockData value =
-    let
-        checkAmount =
-            if value == "" then
-                0
-
-            else
-                value
-                    |> String.toInt
-                    |> Maybe.withDefault blockData.amount
-    in
-    { blockData | amount = checkAmount }
+    { blockData | amount = value }
 
 
 
@@ -293,6 +341,7 @@ init _ =
             , validChain = False
             , validated = False
             , showBlockChain = False
+            , validAmount = True
             , zone = Time.utc
             }
     in
@@ -327,7 +376,27 @@ update msg model =
             ( { model | data = setReceives model.data value }, Cmd.none )
 
         ChangeBlockDataAmount value ->
-            ( { model | data = setAmount model.data value }, Cmd.none )
+            let
+                isNotValidInput =
+                    testRegex numberStartsWithZero value
+
+                amountField =
+                    if isNotValidInput then
+                        value
+                            |> String.toFloat
+                            |> Maybe.withDefault 0
+                            |> (\x -> x + 0)
+                            |> String.fromFloat
+
+                    else
+                        value
+            in
+            ( { model
+                | data = setAmount model.data amountField
+                , validAmount = isValidAmount amountField
+              }
+            , Cmd.none
+            )
 
         SubmitBlockData ->
             ( model, getCurrentTime )
@@ -366,8 +435,8 @@ update msg model =
 -- VIEW ----
 
 
-blockDataFields : BlockData -> Html Msg
-blockDataFields blockData =
+blockDataFields : Bool -> BlockData -> Html Msg
+blockDataFields amountIsValid blockData =
     Html.form
         [ class "ba b--mid-gray pa3 mb4" ]
         [ h3 [ class "f3 f3-m" ]
@@ -410,9 +479,18 @@ blockDataFields blockData =
             , name "amount"
             , type_ "text"
             , onInput ChangeBlockDataAmount
-            , value <| String.fromInt blockData.amount
+            , value blockData.amount
             ]
             []
+        , br []
+            []
+        , div []
+            [ if amountIsValid then
+                text ""
+
+              else
+                text "Enter a valid amount eg: 1.001"
+            ]
         , br []
             []
         , button
@@ -572,12 +650,27 @@ getCreationDate zone t =
         ++ seconds
 
 
+dataFields : BlockData -> Html Msg
+dataFields blockData =
+    let
+        amountStr =
+            blockData.amount
+    in
+    ul [ class "list pl0" ]
+        [ li [] [ text <| "sender: " ++ blockData.sender ]
+        , li [] [ text <| "receives: " ++ blockData.receives ]
+        , li [] [ text <| "amount: " ++ amountStr ]
+        ]
+
+
 blockElements : Zone -> Block -> List (Html Msg)
 blockElements zone block =
     [ li [] [ text <| "index: " ++ String.fromInt block.index ]
     , li [] [ text <| "created date: " ++ getCreationDate zone block.time ]
     , li [] [ text <| "time: " ++ block.time ]
-    , li [] [ text <| "data: " ++ encodeBlockData block.data ]
+    , li []
+        [ dataFields block.data
+        ]
     , li [] [ text <| "previousHash: " ++ block.previousHash ]
     , li [] [ text <| "hash: " ++ block.hash ]
     ]
@@ -620,15 +713,15 @@ renderBlockChainElements model =
 
 
 getLastBlockFromChain : Block -> BlockChain -> Block
-getLastBlockFromChain defBlock blockchain =
+getLastBlockFromChain block blockchain =
     blockchain
         |> List.reverse
         |> List.head
-        |> Maybe.withDefault defBlock
+        |> Maybe.withDefault block
 
 
-showCreatedBlock : Model -> Html Msg
-showCreatedBlock model =
+showCreatedBlock : Model -> Block -> Html Msg
+showCreatedBlock model block =
     let
         zone =
             model.zone
@@ -640,7 +733,7 @@ showCreatedBlock model =
         [ class "ba b--mid-gray br2 pa3 mb4" ]
         [ h3 [ class "f3 f3-m" ] [ text "last block" ]
         , blockchain
-            |> getLastBlockFromChain defaultBlock
+            |> getLastBlockFromChain block
             |> blockElements zone
             |> ul [ class "ml5 list pl0 tl" ]
         ]
@@ -650,8 +743,8 @@ view : Model -> Html Msg
 view model =
     div [ class "pa5" ]
         [ h1 [] [ text "Simple Block chain" ]
-        , showCreatedBlock model
-        , blockDataFields model.data
+        , showCreatedBlock model defaultBlock
+        , blockDataFields model.validAmount model.data
         , validateBlockChainField model
         , renderBlockChainElements model
         ]
