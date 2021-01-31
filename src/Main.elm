@@ -179,8 +179,8 @@ checkAmountField value =
         value
 
 
-isNotEmpty : String -> Bool
-isNotEmpty value =
+lenIsGreatThanZero : String -> Bool
+lenIsGreatThanZero value =
     String.length value > 0
 
 
@@ -319,8 +319,8 @@ createNewBlock block model time =
 validateNewBlockForm : BlockData -> Bool
 validateNewBlockForm blockData =
     List.all (\item -> item)
-        [ String.length blockData.sender > 0
-        , String.length blockData.receives > 0
+        [ lenIsGreatThanZero blockData.sender
+        , lenIsGreatThanZero blockData.receives
         , blockData.amount
             |> String.toFloat
             |> Maybe.withDefault 0
@@ -411,7 +411,7 @@ update msg model =
         ChangeBlockDataSender value ->
             ( { model
                 | data = setSender model.data value
-                , validSender = isNotEmpty value
+                , validSender = lenIsGreatThanZero value
               }
             , Cmd.none
             )
@@ -419,7 +419,7 @@ update msg model =
         ChangeBlockDataReceives value ->
             ( { model
                 | data = setReceives model.data value
-                , validReceiver = isNotEmpty value
+                , validReceiver = lenIsGreatThanZero value
               }
             , Cmd.none
             )
