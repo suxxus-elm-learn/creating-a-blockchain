@@ -588,65 +588,40 @@ getMonth : Time.Month -> String
 getMonth month =
     case month of
         Time.Jan ->
-            "01"
+            "Jan"
 
         Time.Feb ->
-            "02"
+            "Feb"
 
         Time.Mar ->
-            "03"
+            "Mar"
 
         Time.Apr ->
-            "04"
+            "Apr"
 
         Time.May ->
-            "05"
+            "May"
 
         Time.Jun ->
-            "06"
+            "Jun"
 
         Time.Jul ->
-            "07"
+            "Jul"
 
         Time.Aug ->
-            "08"
+            "Aug"
 
         Time.Sep ->
-            "09"
+            "Sep"
 
         Time.Oct ->
-            "10"
+            "Oct"
 
         Time.Nov ->
-            "11"
+            "Nov"
 
         Time.Dec ->
-            "12"
-
-
-getDay : Time.Weekday -> String
-getDay day =
-    case day of
-        Time.Mon ->
-            "01"
-
-        Time.Tue ->
-            "02"
-
-        Time.Wed ->
-            "03"
-
-        Time.Thu ->
-            "04"
-
-        Time.Fri ->
-            "05"
-
-        Time.Sat ->
-            "06"
-
-        Time.Sun ->
-            "07"
+            "Dec"
 
 
 formatTime : String -> String
@@ -676,8 +651,9 @@ getCreationDate zone t =
                 |> getMonth
 
         day =
-            Time.toWeekday zone time
-                |> getDay
+            Time.toDay zone time
+                |> String.fromInt
+                |> formatTime
 
         hour =
             Time.toHour zone time
@@ -694,9 +670,9 @@ getCreationDate zone t =
                 |> formatTime
     in
     year
-        ++ "/"
+        ++ "-"
         ++ month
-        ++ "/"
+        ++ "-"
         ++ day
         ++ " "
         ++ hour
