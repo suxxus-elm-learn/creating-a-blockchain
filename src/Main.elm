@@ -39,8 +39,10 @@ type alias BlockData =
 type alias Model =
     { chain : BlockChain
     , data : BlockData
-    , validChain : Bool
-    , validated : Bool
+    , isChainValidated : Bool
+    , chainHasBeenValidated : Bool
+    , validReceiver : Bool
+    , validSender : Bool
     , validAmount : Bool
     , showBlockChain : Bool
     , zone : Zone
@@ -135,6 +137,10 @@ isGreaterThanZero value =
     value > 0
 
 
+
+---- NEW BLOCK FORM VALIDATORS ----
+
+
 isValidAmount : String -> Bool
 isValidAmount value =
     let
@@ -149,6 +155,37 @@ isValidAmount value =
                 |> isGreaterThanZero
     in
     patternMatch && greaterThanZero
+
+
+startsWithZero : String -> Bool
+startsWithZero value =
+    testRegex numberStartsWithZero value
+
+
+checkAmountField : String -> String
+checkAmountField value =
+    let
+        shouldRemoveTheLeadingZeros =
+            startsWithZero value
+    in
+    if shouldRemoveTheLeadingZeros then
+        value
+            |> String.toFloat
+            |> Maybe.withDefault 0
+            |> (\x -> x + 0)
+            |> String.fromFloat
+
+    else
+        value
+
+
+isNotEmpty : String -> Bool
+isNotEmpty value =
+    String.length value > 0
+
+
+
+---- BLOCK CHAIN VALIDATOR ----
 
 
 isChainValid : BlockChain -> Int -> Int -> Bool
@@ -338,9 +375,11 @@ init _ =
         model =
             { chain = List.singleton createGenesisBlock
             , data = initialData
-            , validChain = False
-            , validated = False
+            , isChainValidated = False
+            , chainHasBeenValidated = False
             , showBlockChain = False
+            , validSender = True
+            , validReceiver = True
             , validAmount = True
             , zone = Time.utc
             }
@@ -370,30 +409,25 @@ update msg model =
             ( { model | zone = timeZone }, Cmd.none )
 
         ChangeBlockDataSender value ->
-            ( { model | data = setSender model.data value }, Cmd.none )
+            ( { model
+                | data = setSender model.data value
+                , validSender = isNotEmpty value
+              }
+            , Cmd.none
+            )
 
         ChangeBlockDataReceives value ->
-            ( { model | data = setReceives model.data value }, Cmd.none )
+            ( { model
+                | data = setReceives model.data value
+                , validReceiver = isNotEmpty value
+              }
+            , Cmd.none
+            )
 
         ChangeBlockDataAmount value ->
-            let
-                isNotValidInput =
-                    testRegex numberStartsWithZero value
-
-                amountField =
-                    if isNotValidInput then
-                        value
-                            |> String.toFloat
-                            |> Maybe.withDefault 0
-                            |> (\x -> x + 0)
-                            |> String.fromFloat
-
-                    else
-                        value
-            in
             ( { model
-                | data = setAmount model.data amountField
-                , validAmount = isValidAmount amountField
+                | data = setAmount model.data <| checkAmountField value
+                , validAmount = isValidAmount <| checkAmountField value
               }
             , Cmd.none
             )
@@ -420,8 +454,8 @@ update msg model =
                     1
             in
             ( { model
-                | validated = True
-                , validChain =
+                | chainHasBeenValidated = True
+                , isChainValidated =
                     isChainValid chain len count
               }
             , Cmd.none
@@ -435,15 +469,15 @@ update msg model =
 -- VIEW ----
 
 
-blockDataFields : Bool -> BlockData -> Html Msg
-blockDataFields amountIsValid blockData =
+blockDataFields : Model -> Html Msg
+blockDataFields model =
     Html.form
         [ class "ba b--mid-gray pa3 mb4" ]
         [ h3 [ class "f3 f3-m" ]
             [ text "New block" ]
         , label
             [ for "sender" ]
-            [ text "sender" ]
+            [ text "sender*" ]
         , br []
             []
         , input
@@ -451,27 +485,45 @@ blockDataFields amountIsValid blockData =
             , name "sender"
             , type_ "text"
             , onInput ChangeBlockDataSender
-            , value blockData.sender
+            , value model.data.sender
             ]
             []
         , br []
             []
+        , div []
+            [ if model.validSender then
+                text ""
+
+              else
+                text "This field is required"
+            ]
+        , br []
+            []
         , label [ for "recive" ]
-            [ text "recive" ]
+            [ text "receive*" ]
         , br []
             []
         , input
             [ id "recive"
-            , name "recive"
+            , name "receive"
             , type_ "text"
             , onInput ChangeBlockDataReceives
-            , value blockData.receives
+            , value model.data.receives
             ]
             []
         , br []
             []
+        , div []
+            [ if model.validReceiver then
+                text ""
+
+              else
+                text "This field is required"
+            ]
+        , br []
+            []
         , label [ for "amount" ]
-            [ text "amount" ]
+            [ text "amount*" ]
         , br []
             []
         , input
@@ -479,13 +531,13 @@ blockDataFields amountIsValid blockData =
             , name "amount"
             , type_ "text"
             , onInput ChangeBlockDataAmount
-            , value blockData.amount
+            , value model.data.amount
             ]
             []
         , br []
             []
         , div []
-            [ if amountIsValid then
+            [ if model.validAmount then
                 text ""
 
               else
@@ -496,17 +548,21 @@ blockDataFields amountIsValid blockData =
         , button
             [ type_ "button"
             , onClick SubmitBlockData
-            , disabled <| not (validateNewBlockForm blockData)
+            , disabled <| not (validateNewBlockForm model.data)
             , class "mt4"
             ]
             [ text "Submit" ]
         ]
 
 
+
+---- SECTION BLOCK CHAIN VALIDATION -----
+
+
 showValidationChainMsg : Bool -> Bool -> Html Msg
-showValidationChainMsg isValidated validChain =
+showValidationChainMsg isValidated isChainValidated =
     if isValidated then
-        if validChain then
+        if isChainValidated then
             p
                 []
                 [ text "valid" ]
@@ -524,7 +580,7 @@ validateBlockChainField model =
         [ class "ba b--mid-gray br2 pa3 mb4" ]
         [ button [ onClick ValidateBlockChain ]
             [ text "validate blockchain" ]
-        , showValidationChainMsg model.validated model.validChain
+        , showValidationChainMsg model.chainHasBeenValidated model.isChainValidated
         ]
 
 
@@ -744,7 +800,7 @@ view model =
     div [ class "pa5" ]
         [ h1 [] [ text "Simple Block chain" ]
         , showCreatedBlock model defaultBlock
-        , blockDataFields model.validAmount model.data
+        , blockDataFields model
         , validateBlockChainField model
         , renderBlockChainElements model
         ]
