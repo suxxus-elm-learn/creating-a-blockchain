@@ -1,0 +1,12 @@
+version: "0.1"
+name: create_blockchain
+services:
+  frontend:
+    image: create-blockchain
+    build:
+      context: .
+    volumes:
+      - .:/app/create-blockchain
+    container_name: create-blockchain
+    ports:
+      - 9900:3000
