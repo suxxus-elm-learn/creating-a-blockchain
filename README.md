@@ -17,6 +17,10 @@ docker logs <container name> -f
 
 ## Useful links:
 
+### Demo
+
+[Creating a Blockchain](https://suxxus.github.io/studies/creating-a-blockchain/)
+
 ### Tutorial
 
 [Creating a blockchain with Javascript](https://www.youtube.com/watch?v=zVqczFZr124)
